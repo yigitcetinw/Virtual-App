@@ -1,10 +1,9 @@
 package com.haxbey.virtual;
 
-import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -15,7 +14,6 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,19 +40,14 @@ public class MainActivity extends AppCompatActivity {
 
         loadClonedApps();
 
-        // "+" butonuna basıldığında telefonlardaki uygulamaları listele
+        // "+" butonuna basıldığında yüklü uygulamaları listele
         btnAddApp.setOnClickListener(v -> showInstalledAppsDialog());
 
-        // Listeden bir klonlanmış uygulamaya tıklandığında
+        // Listeden tıklayınca sanal kopyanın klasör içeriğini ve boyutunu göster
         listViewApps.setOnItemClickListener((parent, view, position, id) -> {
             String appName = clonedAppsList.get(position);
-            File apkFile = new File(getExternalFilesDir(null), "virtual_apps/" + appName + "/base.apk");
-            
-            if (apkFile.exists()) {
-                showAppOptionsDialog(apkFile, appName);
-            } else {
-                Toast.makeText(this, "Hata: APK dosyası bulunamadı!", Toast.LENGTH_SHORT).show();
-            }
+            File virtualAppDir = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
+            Toast.makeText(this, "Sanal Dizin: " + virtualAppDir.getAbsolutePath(), Toast.LENGTH_LONG).show();
         });
     }
 
@@ -86,7 +79,6 @@ public class MainActivity extends AppCompatActivity {
         List<String> packageNames = new ArrayList<>();
 
         for (ApplicationInfo packageInfo : packages) {
-            // Sadece sistem dışı kullanıcı uygulamalarını filtrelemek isteyebilirsin
             appNames.add(pm.getApplicationLabel(packageInfo).toString());
             packageNames.add(packageInfo.packageName);
         }
@@ -105,37 +97,51 @@ public class MainActivity extends AppCompatActivity {
         }, (dialog, which) -> {
             String selectedPackage = packageNames.get(which);
             String selectedName = appNames.get(which);
-            copyAppToVirtual(selectedPackage, selectedName);
+            copyVirtualEnvironmentStructure(selectedPackage, selectedName);
         });
 
         builder.show();
     }
 
-    private void copyAppToVirtual(String packageName, String appName) {
+    // İstediğin Mantık: Tam bir sanal ortam klasör yapısı oluşturup dosyaları oraya kopyalamak
+    private void copyVirtualEnvironmentStructure(String packageName, String appName) {
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
-            File sourceFile = new File(appInfo.sourceDir);
+            File sourceFile = new File(appInfo.sourceDir); // APK kaynağı
 
-            // İstediğin Dizin: android/data/com.haxbey.virtual/files/virtual_apps/UygulamaAdi/base.apk
-            File targetDir = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
-            if (!targetDir.exists()) {
-                targetDir.mkdirs();
+            // Kök Sanal Dizin: android/data/com.haxbey.virtual/files/virtual_apps/UygulamaAdi/
+            File virtualAppRoot = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
+            
+            // İstediğin alt dizin yapıları:
+            // 1. App binary (apk)
+            File apkDir = new File(virtualAppRoot, "apk");
+            // 2. Android/data simülasyonu
+            File androidDataDir = new File(virtualAppRoot, "Android/data/" + packageName);
+            // 3. Android/obb simülasyonu
+            File androidObbDir = new File(virtualAppRoot, "Android/obb/" + packageName);
+
+            if (!apkDir.exists()) apkDir.mkdirs();
+            if (!androidDataDir.exists()) androidDataDir.mkdirs();
+            if (!androidObbDir.exists()) androidObbDir.mkdirs();
+
+            // 1. base.apk dosyasını kopyala
+            File destFile = new File(apkDir, "base.apk");
+            copyFile(sourceFile, destFile);
+
+            // 2. Eğer telefonun harici hafazasında bu uygulamanın data klasörü varsa oradakileri de kopyala
+            File externalData = new File(Environment.getExternalStorageDirectory(), "Android/data/" + packageName);
+            if (externalData.exists() && externalData.isDirectory()) {
+                copyDirectory(externalData, androidDataDir);
             }
 
-            File destFile = new File(targetDir, "base.apk");
-
-            InputStream in = new FileInputStream(sourceFile);
-            OutputStream out = new FileOutputStream(destFile);
-            byte[] buffer = new byte[1024];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
+            // 3. Eğer obb dosyaları varsa onları da kopyala
+            File externalObb = new File(Environment.getExternalStorageDirectory(), "Android/obb/" + packageName);
+            if (externalObb.exists() && externalObb.isDirectory()) {
+                copyDirectory(externalObb, androidObbDir);
             }
-            in.close();
-            out.close();
 
-            Toast.makeText(this, appName + " başarıyla sanal alana kopyalandı!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, appName + " tüm sanal yapısıyla kopyalandı!", Toast.LENGTH_SHORT).show();
             loadClonedApps();
 
         } catch (Exception e) {
@@ -144,52 +150,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Tıklayınca seçenek sunan menü
-    private void showAppOptionsDialog(File apkFile, String appName) {
-        CharSequence[] options = {"Uygulamayı Başlat (Install/Open)", "Dosya Konumunu Göster"};
-        
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(appName + " Seçenekleri");
-        builder.setItems(options, (dialog, which) -> {
-            if (which == 0) {
-                installAndOpenClonedApp(apkFile);
-            } else {
-                Toast.makeText(this, "Konum: " + apkFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
-            }
-        });
-        builder.show();
-    }
-        // Kopyalanan APK'yı güvenli geçici dizine alıp yüöneticisine (PackageInstaller) gönderen gelişmiş metod
-    private void installAndOpenClonedApp(File apkFile) {
+    // Dosya kopyalama yardımcısı
+    private void copyFile(File source, File dest) {
         try {
-            // Android veri klasöründeki dosya doğrudan okunamadığı için, öncelikle 
-            // uygulamanın cache (önbellek) klasörüne kopyalıyoruz
-            File cacheFile = new File(getCacheDir(), "temp_cloned.apk");
-            
-            InputStream in = new FileInputStream(apkFile);
-            OutputStream out = new FileOutputStream(cacheFile);
-            byte[] buffer = new byte[1024];
+            InputStream in = new FileInputStream(source);
+            OutputStream out = new FileOutputStream(dest);
+            byte[] buffer = new byte[4096];
             int read;
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
             }
             in.close();
             out.close();
-
-            // Şimdi yükleme yöneticisini tetikle
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", cacheFile);
-            
-            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            
-            startActivity(intent);
-            Toast.makeText(this, "Yükleme ekranı açılıyor...", Toast.LENGTH_SHORT).show();
-
         } catch (Exception e) {
             e.printStackTrace();
-            Toast.makeText(this, "Çalıştırma Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // Klasör kopyalama yardımcısı (obb ve data dosyaları için)
+    private void copyDirectory(File sourceDir, File destDir) {
+        try {
+            File[] files = sourceDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    File destFile = new File(destDir, file.getName());
+                    if (file.isDirectory()) {
+                        destFile.mkdirs();
+                        copyDirectory(file, destFile);
+                    } else {
+                        copyFile(file, destFile);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }
