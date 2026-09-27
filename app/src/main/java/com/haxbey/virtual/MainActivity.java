@@ -1,7 +1,9 @@
 package com.haxbey.virtual;
 
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.View;
@@ -14,6 +16,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,11 +46,13 @@ public class MainActivity extends AppCompatActivity {
         // "+" butonuna basıldığında yüklü uygulamaları listele
         btnAddApp.setOnClickListener(v -> showInstalledAppsDialog());
 
-        // Listeden tıklayınca sanal kopyanın klasör içeriğini ve boyutunu göster
+        // Listeden tıklayınca yönetim menüsü açılır
         listViewApps.setOnItemClickListener((parent, view, position, id) -> {
             String appName = clonedAppsList.get(position);
-            File virtualAppDir = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
-            Toast.makeText(this, "Sanal Dizin: " + virtualAppDir.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            File virtualAppRoot = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
+            File apkFile = new File(virtualAppRoot, "apk/base.apk");
+            
+            showVirtualAppOptions(virtualAppRoot, apkFile, appName);
         });
     }
 
@@ -103,45 +108,39 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    // İstediğin Mantık: Tam bir sanal ortam klasör yapısı oluşturup dosyaları oraya kopyalamak
     private void copyVirtualEnvironmentStructure(String packageName, String appName) {
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
-            File sourceFile = new File(appInfo.sourceDir); // APK kaynağı
+            File sourceFile = new File(appInfo.sourceDir);
 
-            // Kök Sanal Dizin: android/data/com.haxbey.virtual/files/virtual_apps/UygulamaAdi/
             File virtualAppRoot = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
             
-            // İstediğin alt dizin yapıları:
-            // 1. App binary (apk)
             File apkDir = new File(virtualAppRoot, "apk");
-            // 2. Android/data simülasyonu
             File androidDataDir = new File(virtualAppRoot, "Android/data/" + packageName);
-            // 3. Android/obb simülasyonu
             File androidObbDir = new File(virtualAppRoot, "Android/obb/" + packageName);
 
             if (!apkDir.exists()) apkDir.mkdirs();
             if (!androidDataDir.exists()) androidDataDir.mkdirs();
             if (!androidObbDir.exists()) androidObbDir.mkdirs();
 
-            // 1. base.apk dosyasını kopyala
+            // 1. base.apk kopyala
             File destFile = new File(apkDir, "base.apk");
             copyFile(sourceFile, destFile);
 
-            // 2. Eğer telefonun harici hafazasında bu uygulamanın data klasörü varsa oradakileri de kopyala
+            // 2. Data dosyaları varsa kopyala
             File externalData = new File(Environment.getExternalStorageDirectory(), "Android/data/" + packageName);
             if (externalData.exists() && externalData.isDirectory()) {
                 copyDirectory(externalData, androidDataDir);
             }
 
-            // 3. Eğer obb dosyaları varsa onları da kopyala
+            // 3. Obb dosyaları varsa kopyala
             File externalObb = new File(Environment.getExternalStorageDirectory(), "Android/obb/" + packageName);
             if (externalObb.exists() && externalObb.isDirectory()) {
                 copyDirectory(externalObb, androidObbDir);
             }
 
-            Toast.makeText(this, appName + " tüm sanal yapısıyla kopyalandı!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, appName + " başarıyla sanal dizine klonlandı!", Toast.LENGTH_SHORT).show();
             loadClonedApps();
 
         } catch (Exception e) {
@@ -150,7 +149,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Dosya kopyalama yardımcısı
+    private void showVirtualAppOptions(File rootDir, File apkFile, String appName) {
+        CharSequence[] options = {"Sanal APK'yı Çalıştır / Yükle", "Klasör Yolunu Kopyala/Göster"};
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(appName + " Sanal Yönetimi");
+        builder.setItems(options, (dialog, which) -> {
+            if (which == 0) {
+                if (apkFile.exists()) {
+                    runClonedApk(apkFile);
+                } else {
+                    Toast.makeText(this, "base.apk bulunamadı!", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(this, rootDir.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            }
+        });
+        builder.show();
+    }
+
+    private void runClonedApk(File apkFile) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile);
+            
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            
+            startActivity(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Çalıştırma Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void copyFile(File source, File dest) {
         try {
             InputStream in = new FileInputStream(source);
@@ -167,7 +200,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Klasör kopyalama yardımcısı (obb ve data dosyaları için)
     private void copyDirectory(File sourceDir, File destDir) {
         try {
             File[] files = sourceDir.listFiles();
