@@ -159,18 +159,34 @@ public class MainActivity extends AppCompatActivity {
         });
         builder.show();
     }
-
-    // Kopyalanan APK'yı yükleyip açma tetikleyicisi
+        // Kopyalanan APK'yı güvenli geçici dizine alıp yüöneticisine (PackageInstaller) gönderen gelişmiş metod
     private void installAndOpenClonedApp(File apkFile) {
         try {
+            // Android veri klasöründeki dosya doğrudan okunamadığı için, öncelikle 
+            // uygulamanın cache (önbellek) klasörüne kopyalıyoruz
+            File cacheFile = new File(getCacheDir(), "temp_cloned.apk");
+            
+            InputStream in = new FileInputStream(apkFile);
+            OutputStream out = new FileOutputStream(cacheFile);
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            in.close();
+            out.close();
+
+            // Şimdi yükleme yöneticisini tetikle
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile);
+            Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", cacheFile);
             
             intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             
             startActivity(intent);
+            Toast.makeText(this, "Yükleme ekranı açılıyor...", Toast.LENGTH_SHORT).show();
+
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Çalıştırma Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
