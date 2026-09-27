@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="16dp">
+
+    <!-- Yüklü Sanal Uygulamaların Listesi -->
+    <ListView
+        android:id="@+id/listViewApps"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/btnAddApp"
+        android:divider="@android:color/darker_gray"
+        android:dividerHeight="1dp" />
+
+    <!-- İstediğin "+" Butonu -->
+    <Button
+        android:id="@+id/btnAddApp"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#FF5722"
+        android:text="+"
+        android:textSize="28sp"
+        android:textColor="#FFFFFF" />
+
+</RelativeLayout>
