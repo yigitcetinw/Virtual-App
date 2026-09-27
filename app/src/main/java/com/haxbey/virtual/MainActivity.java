@@ -45,15 +45,15 @@ public class MainActivity extends AppCompatActivity {
         // "+" butonuna basıldığında telefonlardaki uygulamaları listele
         btnAddApp.setOnClickListener(v -> showInstalledAppsDialog());
 
-        // Listeden bir klonlanmış uygulamaya tıklandığında ne olacağı
+        // Listeden bir klonlanmış uygulamaya tıklandığında
         listViewApps.setOnItemClickListener((parent, view, position, id) -> {
             String appName = clonedAppsList.get(position);
             File apkFile = new File(getExternalFilesDir(null), "virtual_apps/" + appName + "/base.apk");
             
             if (apkFile.exists()) {
-                openClonedApp(apkFile, appName);
+                showAppOptionsDialog(apkFile, appName);
             } else {
-                Toast.makeText(this, "APK dosyası bulunamadı!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Hata: APK dosyası bulunamadı!", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -86,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
         List<String> packageNames = new ArrayList<>();
 
         for (ApplicationInfo packageInfo : packages) {
+            // Sadece sistem dışı kullanıcı uygulamalarını filtrelemek isteyebilirsin
             appNames.add(pm.getApplicationLabel(packageInfo).toString());
             packageNames.add(packageInfo.packageName);
         }
@@ -116,6 +117,7 @@ public class MainActivity extends AppCompatActivity {
             ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
             File sourceFile = new File(appInfo.sourceDir);
 
+            // İstediğin Dizin: android/data/com.haxbey.virtual/files/virtual_apps/UygulamaAdi/base.apk
             File targetDir = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
             if (!targetDir.exists()) {
                 targetDir.mkdirs();
@@ -133,20 +135,34 @@ public class MainActivity extends AppCompatActivity {
             in.close();
             out.close();
 
-            Toast.makeText(this, appName + " başarıyla sanal alana kaydedildi!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, appName + " başarıyla sanal alana kopyalandı!", Toast.LENGTH_SHORT).show();
             loadClonedApps();
 
         } catch (Exception e) {
             e.printStackTrace();
-            Toast.makeText(this, "Hata: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Kopyalama Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
-    // Kopyalanan APK'yı çalıştırma denemesi
-    private void openClonedApp(File apkFile, String appName) {
+    // Tıklayınca seçenek sunan menü
+    private void showAppOptionsDialog(File apkFile, String appName) {
+        CharSequence[] options = {"Uygulamayı Başlat (Install/Open)", "Dosya Konumunu Göster"};
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(appName + " Seçenekleri");
+        builder.setItems(options, (dialog, which) -> {
+            if (which == 0) {
+                installAndOpenClonedApp(apkFile);
+            } else {
+                Toast.makeText(this, "Konum: " + apkFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            }
+        });
+        builder.show();
+    }
+
+    // Kopyalanan APK'yı yükleyip açma tetikleyicisi
+    private void installAndOpenClonedApp(File apkFile) {
         try {
-            // Android güvenlik politikaları gereği harici depolamadan APK yüklemek/çalıştırmak 
-            // için Intent tetikliyoruz (Klon uygulamayı kur/aç)
             Intent intent = new Intent(Intent.ACTION_VIEW);
             Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile);
             
@@ -156,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
             
             startActivity(intent);
         } catch (Exception e) {
+            e.printStackTrace();
             Toast.makeText(this, "Çalıştırma Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
