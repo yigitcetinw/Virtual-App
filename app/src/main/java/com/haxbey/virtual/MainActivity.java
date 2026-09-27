@@ -49,7 +49,10 @@ public class MainActivity extends AppCompatActivity {
         // Listeden tıklayınca yönetim menüsü açılır
         listViewApps.setOnItemClickListener((parent, view, position, id) -> {
             String appName = clonedAppsList.get(position);
-            File virtualAppRoot = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
+            
+            // Doğrudan istediğin ana dizin yolu
+            File baseVirtualDir = new File(Environment.getExternalStorageDirectory(), "Android/data/com.haxbey.virtual");
+            File virtualAppRoot = new File(baseVirtualDir, "virtual_apps/" + appName);
             File apkFile = new File(virtualAppRoot, "apk/base.apk");
             
             showVirtualAppOptions(virtualAppRoot, apkFile, appName);
@@ -57,7 +60,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadClonedApps() {
-        File virtualDir = new File(getExternalFilesDir(null), "virtual_apps");
+        // Doğrudan ana Android/data/com.haxbey.virtual/virtual_apps dizinini okuyoruz
+        File baseVirtualDir = new File(Environment.getExternalStorageDirectory(), "Android/data/com.haxbey.virtual");
+        File virtualDir = new File(baseVirtualDir, "virtual_apps");
+        
         if (!virtualDir.exists()) {
             virtualDir.mkdirs();
         }
@@ -114,11 +120,15 @@ public class MainActivity extends AppCompatActivity {
             ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
             File sourceFile = new File(appInfo.sourceDir);
 
-            File virtualAppRoot = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
+            // İstediğin Tam Kök Dizin: /storage/emulated/0/Android/data/com.haxbey.virtual/
+            File baseVirtualDir = new File(Environment.getExternalStorageDirectory(), "Android/data/com.haxbey.virtual");
+            File virtualAppRoot = new File(baseVirtualDir, "virtual_apps/" + appName);
             
+            // İstediğin yol şeması:
+            // /Android/data/com.haxbey.virtual/Android/data/paket.adi
             File apkDir = new File(virtualAppRoot, "apk");
-            File androidDataDir = new File(virtualAppRoot, "Android/data/" + packageName);
-            File androidObbDir = new File(virtualAppRoot, "Android/obb/" + packageName);
+            File androidDataDir = new File(baseVirtualDir, "Android/data/" + packageName);
+            File androidObbDir = new File(baseVirtualDir, "Android/obb/" + packageName);
 
             if (!apkDir.exists()) apkDir.mkdirs();
             if (!androidDataDir.exists()) androidDataDir.mkdirs();
@@ -128,19 +138,19 @@ public class MainActivity extends AppCompatActivity {
             File destFile = new File(apkDir, "base.apk");
             copyFile(sourceFile, destFile);
 
-            // 2. Data dosyaları varsa kopyala
+            // 2. Harici data klasörünü kopyala
             File externalData = new File(Environment.getExternalStorageDirectory(), "Android/data/" + packageName);
             if (externalData.exists() && externalData.isDirectory()) {
                 copyDirectory(externalData, androidDataDir);
             }
 
-            // 3. Obb dosyaları varsa kopyala
+            // 3. Harici obb klasörünü kopyala
             File externalObb = new File(Environment.getExternalStorageDirectory(), "Android/obb/" + packageName);
             if (externalObb.exists() && externalObb.isDirectory()) {
                 copyDirectory(externalObb, androidObbDir);
             }
 
-            Toast.makeText(this, appName + " başarıyla sanal dizine klonlandı!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, appName + " tam şema ile klonlandı!", Toast.LENGTH_SHORT).show();
             loadClonedApps();
 
         } catch (Exception e) {
@@ -150,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showVirtualAppOptions(File rootDir, File apkFile, String appName) {
-        CharSequence[] options = {"Sanal APK'yı Çalıştır / Yükle", "Klasör Yolunu Kopyala/Göster"};
+        CharSequence[] options = {"Sanal APK'yı Çalıştır / Yükle", "Klasör Yolunu Göster"};
         
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(appName + " Sanal Yönetimi");
