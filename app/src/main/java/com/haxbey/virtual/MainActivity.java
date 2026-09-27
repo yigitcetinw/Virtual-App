@@ -1,7 +1,9 @@
 package com.haxbey.virtual;
 
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,6 +15,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -39,12 +42,23 @@ public class MainActivity extends AppCompatActivity {
 
         loadClonedApps();
 
-        // "+" butonuna basıldığında telefonlardaki uygulamaları listeleyen pencere açılacak
+        // "+" butonuna basıldığında telefonlardaki uygulamaları listele
         btnAddApp.setOnClickListener(v -> showInstalledAppsDialog());
+
+        // Listeden bir klonlanmış uygulamaya tıklandığında ne olacağı
+        listViewApps.setOnItemClickListener((parent, view, position, id) -> {
+            String appName = clonedAppsList.get(position);
+            File apkFile = new File(getExternalFilesDir(null), "virtual_apps/" + appName + "/base.apk");
+            
+            if (apkFile.exists()) {
+                openClonedApp(apkFile, appName);
+            } else {
+                Toast.makeText(this, "APK dosyası bulunamadı!", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void loadClonedApps() {
-        // android/data/com.haxbey.virtual/files/virtual_apps dizinini kontrol et
         File virtualDir = new File(getExternalFilesDir(null), "virtual_apps");
         if (!virtualDir.exists()) {
             virtualDir.mkdirs();
@@ -72,21 +86,18 @@ public class MainActivity extends AppCompatActivity {
         List<String> packageNames = new ArrayList<>();
 
         for (ApplicationInfo packageInfo : packages) {
-            // Sadece üçüncü parti uygulamaları filtrelemek isteyebilirsin ama şimdilik hepsi gelsin
             appNames.add(pm.getApplicationLabel(packageInfo).toString());
             packageNames.add(packageInfo.packageName);
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Uygulama Seç");
+        builder.setTitle("Sanal Alana Eklenecek Uygulamayı Seç");
 
-        View dialogView = getLayoutInflater().inflate(android.R.layout.select_dialog_item, null);
-        
         builder.setAdapter(new ArrayAdapter<String>(this, android.R.layout.select_dialog_item, appNames) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 View view = super.getView(position, convertView, parent);
-                TextView tv = (TextView) view.findViewById(android.R.id.text1);
+                TextView tv = view.findViewById(android.R.id.text1);
                 tv.setText(appNames.get(position));
                 return view;
             }
@@ -99,14 +110,12 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    // İstediğin Mantık: Seçilen uygulamanın tüm dosyalarını android/data/com.haxbey.virtual/... içine kopyalama
     private void copyAppToVirtual(String packageName, String appName) {
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
-            File sourceFile = new File(appInfo.sourceDir); // base.apk yolu
+            File sourceFile = new File(appInfo.sourceDir);
 
-            // Hedef Dizin: android/data/com.haxbey.virtual/files/virtual_apps/UygulamaAdi
             File targetDir = new File(getExternalFilesDir(null), "virtual_apps/" + appName);
             if (!targetDir.exists()) {
                 targetDir.mkdirs();
@@ -114,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
 
             File destFile = new File(targetDir, "base.apk");
 
-            // Kopyalama İşlemi
             InputStream in = new FileInputStream(sourceFile);
             OutputStream out = new FileOutputStream(destFile);
             byte[] buffer = new byte[1024];
@@ -125,12 +133,30 @@ public class MainActivity extends AppCompatActivity {
             in.close();
             out.close();
 
-            Toast.makeText(this, appName + " Sanal alana kopyalandı!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, appName + " başarıyla sanal alana kaydedildi!", Toast.LENGTH_SHORT).show();
             loadClonedApps();
 
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Hata: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // Kopyalanan APK'yı çalıştırma denemesi
+    private void openClonedApp(File apkFile, String appName) {
+        try {
+            // Android güvenlik politikaları gereği harici depolamadan APK yüklemek/çalıştırmak 
+            // için Intent tetikliyoruz (Klon uygulamayı kur/aç)
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apkFile);
+            
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Çalıştırma Hatası: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 }
